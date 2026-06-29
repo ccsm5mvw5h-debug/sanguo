@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#121912" />
+    <meta name="description" content="三国题材回合制策略棋盘游戏《三国志·天运》可玩原型" />
+    <title>三国志·天运</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div class="paper-noise" aria-hidden="true"></div>
+    <main id="app" class="app-shell" hidden>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">回合制策略棋盘</p>
+          <h1>三国志<span>·天运</span></h1>
+        </div>
+        <div class="round-seal" aria-live="polite">
+          <small>天下</small>
+          <strong id="round-label">一</strong>
+          <small>轮</small>
+        </div>
+        <div class="top-actions">
+          <button id="save-button" class="button ghost" type="button">保存进度</button>
+          <button id="new-game-button" class="button ghost" type="button">重新开局</button>
+        </div>
+      </header>
+
+      <section id="player-strip" class="player-strip" aria-label="势力状态"></section>
+
+      <section class="game-layout">
+        <div class="board-card">
+          <div class="board-heading">
+            <div>
+              <p id="turn-kicker" class="eyebrow">准备阶段</p>
+              <h2 id="turn-title">等待天命</h2>
+            </div>
+            <div id="dice-display" class="dice-display" aria-label="骰子点数">—</div>
+          </div>
+          <canvas id="board" width="1000" height="680" aria-label="135 格环形棋盘"></canvas>
+          <div class="legend" aria-label="棋盘图例">
+            <span><i class="legend-dot city"></i>州郡</span>
+            <span><i class="legend-dot strategy"></i>计策</span>
+            <span><i class="legend-dot event"></i>事件</span>
+            <span><i class="legend-dot market"></i>市场</span>
+            <span><i class="legend-dot facility"></i>设施</span>
+          </div>
+        </div>
+
+        <aside class="command-column">
+          <section class="panel command-panel">
+            <p class="eyebrow">军令</p>
+            <div id="location-summary" class="location-summary"></div>
+            <div id="command-content" class="command-content" aria-live="polite"></div>
+          </section>
+
+          <section class="panel hand-panel">
+            <div class="panel-title-row">
+              <div>
+                <p class="eyebrow">锦囊</p>
+                <h3>计策手牌</h3>
+              </div>
+              <span id="hand-count" class="count-badge">0 / 4</span>
+            </div>
+            <div id="hand-list" class="hand-list"></div>
+          </section>
+
+          <section class="panel log-panel">
+            <div class="panel-title-row">
+              <div>
+                <p class="eyebrow">史官录</p>
+                <h3>天下纪事</h3>
+              </div>
+            </div>
+            <ol id="game-log" class="game-log"></ol>
+          </section>
+        </aside>
+      </section>
+    </main>
+
+    <section id="setup-screen" class="setup-screen">
+      <div class="setup-copy">
+        <p class="eyebrow">正式版规则 · 可玩原型 0.1</p>
+        <h1>择一良将，<br /><span>问鼎天下。</span></h1>
+        <p class="setup-lead">一人对阵三方 AI。以财富经营州郡，以兵锋突破群雄，或率先累积 240 威望。</p>
+        <div class="victory-notes">
+          <span>壹 · 破产胜利</span>
+          <span>贰 · 威望胜利</span>
+          <span>叁 · 135 格环形地图</span>
+        </div>
+      </div>
+      <div class="setup-panel">
+        <div class="setup-panel-header">
+          <div>
+            <p class="eyebrow">开局配置</p>
+            <h2>选择主将</h2>
+          </div>
+          <p>其余三方将从未选择的武将中随机产生</p>
+        </div>
+        <div id="general-grid" class="general-grid"></div>
+        <div class="setup-actions">
+          <button id="start-button" class="button primary large" type="button">执掌天运</button>
+          <button id="continue-button" class="button ghost large" type="button" hidden>继续上次战局</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div id="game-over" class="modal-backdrop" hidden>
+      <div class="victory-card">
+        <p class="eyebrow">天下归一</p>
+        <h2 id="winner-title">胜负已定</h2>
+        <p id="winner-description"></p>
+        <button id="victory-new-game" class="button primary large" type="button">再开一局</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
