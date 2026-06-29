@@ -11,8 +11,15 @@ import {
   challengeCity,
   createGame,
   endTurn,
+  getCityPurchaseAvailability,
   getCurrentPlayer,
+  getFerryAvailability,
+  getHospitalAvailability,
   getLandingContext,
+  getMarketItemAvailability,
+  getStrategyCardAvailability,
+  getStrategyDrawAvailability,
+  getUpgradeAvailability,
   marketPrice,
   payCurrentRent,
   resolveFunctionalTile,
@@ -254,8 +261,15 @@ function locationDescription(context) {
   return descriptions[context.kind] ?? '天下局势瞬息万变。';
 }
 
-function button(label, action, style = 'secondary', extra = '') {
-  return `<button type="button" class="button ${style} ${extra}" data-action="${action}" ${busy ? 'disabled' : ''}>${label}</button>`;
+function button(label, action, style = 'secondary', extra = '', availability = null) {
+  const blocked = availability?.allowed === false;
+  const explanation = blocked ? `${availability.reason} 达成条件：${availability.requirement}` : '';
+  return `<button type="button" class="button ${style} ${extra}" data-action="${action}" ${busy || blocked ? 'disabled' : ''} ${explanation ? `title="${explanation}" aria-label="${label}。${explanation}"` : ''}>${label}</button>`;
+}
+
+function requirementNotice(availability, compact = false) {
+  if (!availability || availability.allowed) return '';
+  return `<div class="requirement-notice ${compact ? 'compact' : ''}"><strong>暂不可执行</strong><span>${availability.reason}</span><small>达成条件：${availability.requirement}</small></div>`;
 }
 
 function renderCommands() {
@@ -273,22 +287,32 @@ function renderCommands() {
   }
   if (game.phase === PHASES.LANDING) {
     if (context.kind === 'unowned-city') {
-      const price = player.generalId === 'sunquan' && !player.status.boughtThisRound ? Math.round(context.city.price * 0.8) : context.city.price;
-      els.command.innerHTML = `<p>可将 ${context.city.name} 纳入治下，需 ${price} 金。当前持有 ${player.gold} 金。</p><div class="command-buttons">${button(`购入 · ${price} 金`, 'buy-city', 'primary')}${button('暂不购入', 'skip-landing')}</div>`;
+      const availability = getCityPurchaseAvailability(game);
+      const price = availability.price;
+      els.command.innerHTML = `<p>可将 ${context.city.name} 纳入治下，需 ${price} 金。当前持有 ${player.gold} 金。</p><div class="command-buttons">${button(`购入 · ${price} 金`, 'buy-city', 'primary', '', availability)}${button('暂不购入', 'skip-landing')}</div>${requirementNotice(availability)}`;
     } else if (context.kind === 'opponent-city') {
       const rent = calculateRent(context.city, context.cityState.level, player);
       els.command.innerHTML = `<p>${context.owner.name} 控制此地。可直接缴纳 ${rent} 金，或以兵锋博取免单与战利品。</p><div class="command-buttons">${button(`缴费 · ${rent} 金`, 'pay-rent')}${button('挑战免单', 'challenge')}${button('正式攻城', 'siege', 'danger', 'wide')}</div>`;
     } else if (context.kind === 'owned-city') {
-      const next = context.cityState.level + 1;
-      const gold = Math.round(context.city.price * (next === 2 ? 0.5 : 0.75));
-      const wood = next === 2 ? 2 : 4;
-      const upgrade = next <= 3 ? button(`升至 ${next} 级 · ${gold} 金 / ${wood} 木`, 'upgrade', 'secondary', 'wide') : '';
-      els.command.innerHTML = `<p>这是你的领地，当前 ${context.cityState.level} 级。升级可提高过路费与城防。</p><div class="command-buttons">${upgrade}${button('继续', 'skip-landing', 'primary', 'wide')}</div>`;
+      const availability = getUpgradeAvailability(game);
+      const label = availability.level === 3 ? '已达最高等级' : `升至 ${availability.nextLevel} 级 · ${availability.goldCost} 金 / ${availability.woodCost} 木`;
+      const upgrade = button(label, 'upgrade', 'secondary', 'wide', availability);
+      els.command.innerHTML = `<p>这是你的领地，当前 ${context.cityState.level} 级。升级可提高过路费与城防。</p><div class="command-buttons">${upgrade}${button('继续', 'skip-landing', 'primary', 'wide')}</div>${requirementNotice(availability)}`;
     } else if (context.kind === TILE_TYPES.MARKET) {
-      const items = MARKET_ITEMS.map((item) => button(`${item.name} · ${marketPrice(player, item)} 金`, `market:${item.id}`)).join('');
-      els.command.innerHTML = `<p>可以买多件军需；完成后离开市场。</p><div class="command-buttons">${items}${button('离开市场', 'resolve-tile', 'primary', 'wide')}</div>`;
+      const items = MARKET_ITEMS.map((item) => {
+        const availability = getMarketItemAvailability(game, item.id);
+        return `<div class="action-option">${button(`${item.name} · ${marketPrice(player, item)} 金`, `market:${item.id}`, 'secondary', 'wide', availability)}${requirementNotice(availability, true)}</div>`;
+      }).join('');
+      els.command.innerHTML = `<p>可以买多件军需；不能购买的商品会显示所缺条件。</p><div class="market-options">${items}</div><div class="command-buttons">${button('离开市场', 'resolve-tile', 'primary', 'wide')}</div>`;
     } else if (context.kind === TILE_TYPES.FERRY) {
-      els.command.innerHTML = `<p>是否乘船抄近道？抵达目标后不会再次触发落脚事件。</p><div class="command-buttons">${button('乘船', 'use-ferry', 'primary')}${button('不乘', 'skip-ferry')}</div>`;
+      const availability = getFerryAvailability(game);
+      els.command.innerHTML = `<p>是否乘船抄近道？抵达目标后不会再次触发落脚事件。</p><div class="command-buttons">${button('乘船', 'use-ferry', 'primary', '', availability)}${button('不乘', 'skip-ferry')}</div>${requirementNotice(availability)}`;
+    } else if (context.kind === TILE_TYPES.HOSPITAL) {
+      const availability = getHospitalAvailability(game);
+      els.command.innerHTML = `<p>${locationDescription(context)}</p><div class="command-buttons">${button('接受治疗', 'resolve-tile', 'primary', '', availability)}${button('离开医馆', 'skip-landing')}</div>${requirementNotice(availability)}`;
+    } else if (context.kind === TILE_TYPES.STRATEGY) {
+      const availability = getStrategyDrawAvailability(game);
+      els.command.innerHTML = `<p>${locationDescription(context)}</p><div class="command-buttons">${button('抽取计策', 'resolve-tile', 'primary', '', availability)}${button('继续', 'skip-landing')}</div>${requirementNotice(availability)}`;
     } else {
       els.command.innerHTML = `<p>${locationDescription(context)}</p><div class="command-buttons">${button('处理落脚效果', 'resolve-tile', 'primary', 'wide')}</div>`;
     }
@@ -296,8 +320,13 @@ function renderCommands() {
   }
   if (game.phase === PHASES.POST_ACTION) {
     let upgrade = '';
-    if (context.kind === 'owned-city' && context.cityState.level < 3) upgrade = button('建设当前城市', 'upgrade', 'secondary');
-    els.command.innerHTML = `<p>可以使用一张计策，或结束回合，将天命交给下一方势力。</p><div class="command-buttons">${upgrade}${button('结束回合', 'end-turn', 'primary', upgrade ? '' : 'wide')}</div>`;
+    let notice = '';
+    if (context.kind === 'owned-city') {
+      const availability = getUpgradeAvailability(game);
+      upgrade = button(availability.level === 3 ? '城市已满级' : '建设当前城市', 'upgrade', 'secondary', '', availability);
+      notice = requirementNotice(availability);
+    }
+    els.command.innerHTML = `<p>可以使用一张计策，或结束回合，将天命交给下一方势力。</p><div class="command-buttons">${upgrade}${button('结束回合', 'end-turn', 'primary', upgrade ? '' : 'wide')}</div>${notice}`;
     return;
   }
   if (game.phase === PHASES.GAME_OVER) els.command.innerHTML = '<p>天下胜负已定。</p>';
@@ -315,8 +344,11 @@ function renderHand() {
   const opponents = game.players.filter((candidate) => candidate.id !== player.id && !candidate.bankrupt);
   els.handList.innerHTML = player.hand.map((card, index) => {
     const targetSelect = card.target === 'opponent' ? `<select aria-label="计策目标" data-target-for="${index}">${opponents.map((target) => `<option value="${target.id}">${target.name}</option>`).join('')}</select>` : '';
-    const canUse = player.isHuman && game.phase === PHASES.POST_ACTION && !busy;
-    return `<article class="hand-card"><header><strong>${card.name}</strong><span class="eyebrow">${card.target === 'self' ? '自身' : card.target === 'richest' ? '最富者' : '对手'}</span></header><p>${card.description}</p><div class="hand-actions">${targetSelect}<button type="button" class="button ghost" data-card-index="${index}" ${canUse ? '' : 'disabled'}>使用</button></div></article>`;
+    let availability = getStrategyCardAvailability(game, index, opponents[0]?.id);
+    if (!player.isHuman) availability = { allowed: false, reason: '当前不是你的势力回合。', requirement: '等待 AI 回合结束。' };
+    if (busy) availability = { allowed: false, reason: '其他势力正在行动。', requirement: '等待推演结束并轮到你的行动后阶段。' };
+    const explanation = availability.allowed ? '' : `${availability.reason} 达成条件：${availability.requirement}`;
+    return `<article class="hand-card" data-card="${index}"><header><strong>${card.name}</strong><span class="eyebrow">${card.target === 'self' ? '自身' : card.target === 'richest' ? '最富者' : '对手'}</span></header><p>${card.description}</p><div class="hand-actions">${targetSelect}<button type="button" class="button ghost" data-card-index="${index}" ${availability.allowed ? '' : 'disabled'} ${explanation ? `title="${explanation}"` : ''}>使用</button></div><div class="card-requirement">${requirementNotice(availability, true)}</div></article>`;
   }).join('');
 }
 
@@ -357,21 +389,21 @@ function handleCommand(action) {
   if (action === 'roll') rollDice(game);
   else if (action === 'buy-city') {
     result = buyCurrentCity(game);
-    if (!result.ok) showToast('黄金不足，无法购入');
+    if (!result.ok) showToast(`${result.availability.reason} ${result.availability.requirement}`);
   } else if (action === 'skip-landing') skipLandingAction(game);
   else if (action === 'pay-rent') payCurrentRent(game);
   else if (action === 'challenge') challengeCity(game);
   else if (action === 'siege') siegeCurrentCity(game);
   else if (action === 'upgrade') {
     result = upgradeCurrentCity(game);
-    if (!result.ok) showToast(result.reason === 'max' ? '城市已达最高等级' : '黄金或木材不足');
+    if (!result.ok) showToast(`${result.availability.reason} ${result.availability.requirement}`);
   } else if (action === 'resolve-tile') resolveFunctionalTile(game, { useFerry: false });
   else if (action === 'use-ferry') resolveFunctionalTile(game, { useFerry: true });
   else if (action === 'skip-ferry') {
     resolveFunctionalTile(game, { useFerry: false });
   } else if (action.startsWith('market:')) {
     result = buyMarketItem(game, action.slice(7));
-    if (!result.ok) showToast('黄金不足');
+    if (!result.ok) showToast(`${result.availability.reason} ${result.availability.requirement}`);
   } else if (action === 'end-turn') {
     endTurn(game);
     persistGame(false);
@@ -419,9 +451,21 @@ els.handList.addEventListener('click', (event) => {
   const cardIndex = Number(target.dataset.cardIndex);
   const select = els.handList.querySelector(`[data-target-for="${cardIndex}"]`);
   const result = useStrategyCard(game, cardIndex, select?.value);
-  if (!result.ok) showToast(result.reason === 'food' ? '粮草不足' : '请选择有效目标');
+  if (!result.ok) showToast(`${result.availability.reason} ${result.availability.requirement}`);
   persistGame(false);
   render();
+});
+els.handList.addEventListener('change', (event) => {
+  const select = event.target.closest('[data-target-for]');
+  if (!select) return;
+  const cardIndex = Number(select.dataset.targetFor);
+  const availability = getStrategyCardAvailability(game, cardIndex, select.value);
+  const card = els.handList.querySelector(`[data-card="${cardIndex}"]`);
+  const useButton = card.querySelector('[data-card-index]');
+  const notice = card.querySelector('.card-requirement');
+  useButton.disabled = !availability.allowed;
+  useButton.title = availability.allowed ? '' : `${availability.reason} 达成条件：${availability.requirement}`;
+  notice.innerHTML = requirementNotice(availability, true);
 });
 
 renderSetup();

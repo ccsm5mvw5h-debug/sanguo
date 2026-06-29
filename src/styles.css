@@ -160,6 +160,14 @@ h1, h2, h3 { font-family: "STKaiti", "KaiTi", "Noto Serif SC", serif; }
 .command-content p { color: var(--muted); font-size: 0.82rem; line-height: 1.6; }
 .command-buttons { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .command-buttons .wide { grid-column: 1 / -1; }
+.market-options { display: grid; gap: 8px; margin-bottom: 9px; }
+.action-option { display: grid; gap: 5px; }
+.action-option .button { width: 100%; }
+.requirement-notice { display: grid; gap: 3px; margin-top: 9px; padding: 10px 11px; border: 1px solid rgba(225, 122, 102, 0.26); border-radius: 5px; background: rgba(198, 83, 62, 0.08); }
+.requirement-notice strong { color: #e6a193; font-size: 0.71rem; }
+.requirement-notice span { color: #d8b1a8; font-size: 0.7rem; line-height: 1.45; }
+.requirement-notice small { color: var(--gold-light); font-size: 0.66rem; line-height: 1.45; }
+.requirement-notice.compact { margin-top: 0; padding: 7px 8px; }
 
 .hand-list { display: grid; gap: 8px; margin-top: 12px; }
 .empty-state { padding: 18px 8px; color: #7f897b; text-align: center; font-size: 0.78rem; border: 1px dashed var(--line); border-radius: 5px; }
@@ -170,6 +178,7 @@ h1, h2, h3 { font-family: "STKaiti", "KaiTi", "Noto Serif SC", serif; }
 .hand-actions { display: flex; gap: 6px; }
 .hand-actions select { min-width: 0; flex: 1; padding: 6px; color: var(--ink); border: 1px solid var(--line); border-radius: 4px; background: #18211a; font-size: 0.7rem; }
 .hand-actions button { min-height: 30px; padding: 0 10px; font-size: 0.7rem; }
+.card-requirement { margin-top: 6px; }
 
 .log-panel { flex: 1; min-height: 210px; }
 .game-log { max-height: 280px; margin: 12px 0 0; padding: 0; list-style: none; overflow-y: auto; scrollbar-width: thin; }

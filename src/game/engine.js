@@ -270,11 +270,103 @@ function purchaseDiscount(player, city) {
   return city.price;
 }
 
+function available(requirement, details = {}) {
+  return { allowed: true, reason: '', requirement, ...details };
+}
+
+function unavailable(reason, requirement, details = {}) {
+  return { allowed: false, reason, requirement, ...details };
+}
+
+export function getCityPurchaseAvailability(game) {
+  const context = getLandingContext(game);
+  if (context.kind !== 'unowned-city') {
+    return unavailable('当前格子不是无主城郡。', '必须停在尚未被任何势力占领的城郡。');
+  }
+  const price = purchaseDiscount(context.player, context.city);
+  const requirement = `至少持有 ${price} 金。`;
+  if (context.player.gold < price) {
+    return unavailable(
+      `黄金不足：当前 ${context.player.gold} 金，缺少 ${price - context.player.gold} 金。`,
+      requirement,
+      { price },
+    );
+  }
+  return available(requirement, { price });
+}
+
+export function getUpgradeAvailability(game) {
+  const context = getLandingContext(game);
+  if (context.kind !== 'owned-city') {
+    return unavailable('当前城郡不属于你。', '必须停在自己拥有的城郡。');
+  }
+  if (context.cityState.level >= 3) {
+    return unavailable('当前城市已经达到最高 3 级。', '3 级城市无需继续升级。', { level: 3 });
+  }
+  const nextLevel = context.cityState.level + 1;
+  const goldCost = Math.round(context.city.price * (nextLevel === 2 ? 0.5 : 0.75));
+  const woodCost = nextLevel === 2 ? 2 : 4;
+  const requirement = `升至 ${nextLevel} 级需要 ${goldCost} 金和 ${woodCost} 木材。`;
+  const shortages = [];
+  if (context.player.gold < goldCost) shortages.push(`黄金缺少 ${goldCost - context.player.gold} 金`);
+  if (context.player.wood < woodCost) shortages.push(`木材缺少 ${woodCost - context.player.wood}`);
+  if (shortages.length) {
+    return unavailable(`${shortages.join('；')}。`, requirement, { nextLevel, goldCost, woodCost });
+  }
+  return available(requirement, { nextLevel, goldCost, woodCost });
+}
+
+export function getFerryAvailability(game) {
+  const player = getCurrentPlayer(game);
+  const tile = BOARD[player.position];
+  if (tile.type !== TILE_TYPES.FERRY) {
+    return unavailable('当前不在渡口。', '必须停在渡口格。');
+  }
+  const cost = player.generalId === 'sunquan' ? 0 : 50;
+  const requirement = '乘船需要 50 金；孙权免费。';
+  if (player.gold < cost) {
+    return unavailable(
+      `黄金不足：当前 ${player.gold} 金，缺少 ${cost - player.gold} 金。`,
+      requirement,
+      { cost },
+    );
+  }
+  return available(requirement, { cost });
+}
+
+export function getHospitalAvailability(game) {
+  const player = getCurrentPlayer(game);
+  const tile = BOARD[player.position];
+  if (tile.type !== TILE_TYPES.HOSPITAL) {
+    return unavailable('当前不在医馆。', '必须停在医馆格。');
+  }
+  const cost = player.generalId === 'huatuo' ? 0 : 80;
+  const requirement = '治疗需要 80 金；华佗免费。';
+  if (player.gold < cost) {
+    return unavailable(
+      `黄金不足：当前 ${player.gold} 金，缺少 ${cost - player.gold} 金。`,
+      requirement,
+      { cost },
+    );
+  }
+  return available(requirement, { cost });
+}
+
+export function getStrategyDrawAvailability(game, player = getCurrentPlayer(game)) {
+  const general = getGeneral(player);
+  const limit = calculateHandLimit(general.intelligence, player.generalId);
+  const requirement = `手牌必须少于 ${limit} 张；可在行动后阶段先使用计策腾出位置。`;
+  if (player.hand.length >= limit) {
+    return unavailable(`手牌已满：当前 ${player.hand.length}/${limit} 张，无法继续抽牌。`, requirement, { limit });
+  }
+  return available(requirement, { limit });
+}
+
 export function buyCurrentCity(game) {
   const context = getLandingContext(game);
-  if (context.kind !== 'unowned-city') throw new Error('这里没有可购买城市');
-  const price = purchaseDiscount(context.player, context.city);
-  if (context.player.gold < price) return { ok: false, reason: 'gold', price };
+  const availability = getCityPurchaseAvailability(game);
+  if (!availability.allowed) return { ok: false, reason: 'gold', availability, price: availability.price };
+  const price = availability.price;
   context.player.gold -= price;
   context.cityState.ownerId = context.player.id;
   const property = { cityId: context.city.id, level: 1 };
@@ -390,12 +482,9 @@ export function siegeCurrentCity(game) {
 
 export function upgradeCurrentCity(game) {
   const context = getLandingContext(game);
-  if (context.kind !== 'owned-city') return { ok: false, reason: 'owner' };
-  if (context.cityState.level >= 3) return { ok: false, reason: 'max' };
-  const nextLevel = context.cityState.level + 1;
-  const goldCost = Math.round(context.city.price * (nextLevel === 2 ? 0.5 : 0.75));
-  const woodCost = nextLevel === 2 ? 2 : 4;
-  if (context.player.gold < goldCost || context.player.wood < woodCost) return { ok: false, reason: 'resources', goldCost, woodCost };
+  const availability = getUpgradeAvailability(game);
+  if (!availability.allowed) return { ok: false, reason: 'resources', availability, ...availability };
+  const { nextLevel, goldCost, woodCost } = availability;
   context.player.gold -= goldCost;
   context.player.wood -= woodCost;
   context.cityState.level = nextLevel;
@@ -407,9 +496,8 @@ export function upgradeCurrentCity(game) {
 
 export function drawStrategyCard(game, player = getCurrentPlayer(game)) {
   const card = randomItem(game, STRATEGY_CARDS);
-  const general = getGeneral(player);
-  const limit = calculateHandLimit(general.intelligence, player.generalId);
-  if (player.hand.length >= limit) {
+  const availability = getStrategyDrawAvailability(game, player);
+  if (!availability.allowed) {
     addLog(game, `${player.name} 手牌已满，错过了 ${card.name}。`);
     return null;
   }
@@ -425,12 +513,44 @@ function strategyResisted(game, user, target) {
   return game.rng() < chance;
 }
 
+export function getStrategyCardAvailability(game, cardIndex, targetId) {
+  const player = getCurrentPlayer(game);
+  const card = player.hand[cardIndex];
+  if (!card) return unavailable('找不到这张计策。', '选择一张当前手牌中的计策。', { code: 'card' });
+  if (game.phase !== PHASES.POST_ACTION) {
+    return unavailable(
+      `当前处于${game.phase === PHASES.MOVEMENT ? '移动' : game.phase === PHASES.LANDING ? '落脚' : '准备'}阶段。`,
+      '只能在自己的行动后阶段使用计策。',
+      { code: 'phase' },
+    );
+  }
+  const target = targetId ? game.players.find((candidate) => candidate.id === targetId && !candidate.bankrupt) : null;
+  if (card.target === 'opponent' && (!target || target.id === player.id)) {
+    return unavailable('尚未选择有效的对手。', '选择一名未破产的对手作为目标。', { code: 'target' });
+  }
+  if (card.id === 'recruit' && player.food < 100) {
+    return unavailable(
+      `粮草不足：当前 ${player.food}，缺少 ${100 - player.food}。`,
+      '使用“募兵”需要至少 100 粮草。',
+      { code: 'food' },
+    );
+  }
+  if (card.id === 'sabotage' && !target.properties.some((property) => property.level > 1)) {
+    return unavailable(
+      `${target.name} 没有已升级的城市，破坏不会生效。`,
+      '目标必须至少拥有一座 2 级或 3 级城市。',
+      { code: 'target-city' },
+    );
+  }
+  return available('当前条件已满足。', { code: 'ready' });
+}
+
 export function useStrategyCard(game, cardIndex, targetId) {
   const player = getCurrentPlayer(game);
   const card = player.hand[cardIndex];
-  if (!card) return { ok: false, reason: 'card' };
+  const availability = getStrategyCardAvailability(game, cardIndex, targetId);
+  if (!availability.allowed) return { ok: false, reason: availability.code, availability };
   const target = targetId ? game.players.find((candidate) => candidate.id === targetId && !candidate.bankrupt) : null;
-  if (card.target === 'opponent' && (!target || target.id === player.id)) return { ok: false, reason: 'target' };
   if (target && strategyResisted(game, player, target)) {
     player.hand.splice(cardIndex, 1);
     addLog(game, `${target.name} 识破并抵抗了“${card.name}”。`);
@@ -464,7 +584,6 @@ export function useStrategyCard(game, cardIndex, targetId) {
     player.status.rentShield += 1;
     result = { shield: 1 };
   } else if (card.id === 'recruit') {
-    if (player.food < 100) return { ok: false, reason: 'food' };
     player.food -= 100;
     player.troops += 100;
     result = { troops: 100 };
@@ -503,16 +622,18 @@ export function resolveFunctionalTile(game, { useFerry = true } = {}) {
     }
   } else if (tile.type === TILE_TYPES.HOSPITAL) {
     const isHuaTuo = player.generalId === 'huatuo';
-    const cost = isHuaTuo ? 0 : 80;
-    if (player.gold >= cost) {
+    const availability = getHospitalAvailability(game);
+    const cost = availability.cost;
+    if (availability.allowed) {
       player.gold -= cost;
       player.troops += isHuaTuo ? 200 : 100;
       if (isHuaTuo) player.prestige += 5;
       addLog(game, `${player.name} 在医馆治疗，恢复 ${isHuaTuo ? 200 : 100} 兵力。`, 'good');
     }
   } else if (tile.type === TILE_TYPES.FERRY && useFerry) {
-    const cost = player.generalId === 'sunquan' ? 0 : 50;
-    if (player.gold >= cost) {
+    const availability = getFerryAvailability(game);
+    const cost = availability.cost;
+    if (availability.allowed) {
       player.gold -= cost;
       player.position = tile.destination;
       result.destination = tile.destination;
@@ -527,12 +648,33 @@ export function marketPrice(player, item) {
   return Math.max(1, Math.round(item.price * (1 - 0.02 * getGeneral(player).charm)));
 }
 
-export function buyMarketItem(game, itemId) {
+export function getMarketItemAvailability(game, itemId) {
   const player = getCurrentPlayer(game);
   const item = MARKET_ITEMS.find((candidate) => candidate.id === itemId);
-  if (!item) return { ok: false, reason: 'item' };
+  if (!item) return unavailable('找不到该商品。', '选择市场中存在的商品。', { code: 'item' });
   const price = marketPrice(player, item);
-  if (player.gold < price) return { ok: false, reason: 'gold', price };
+  const requirement = `购买${item.name}需要 ${price} 金。`;
+  if (item.id === 'weapon' && player.weapon >= 2) {
+    return unavailable('已经装备青釭剑，重复购买不会增加战力。', '无需重复购买；当前武器加成已达到 +2。', { code: 'equipped', price, item });
+  }
+  if (item.id === 'armor' && player.armor >= 2) {
+    return unavailable('已经装备明光铠，重复购买不会增加战力。', '无需重复购买；当前防具加成已达到 +2。', { code: 'equipped', price, item });
+  }
+  if (player.gold < price) {
+    return unavailable(
+      `黄金不足：当前 ${player.gold} 金，缺少 ${price - player.gold} 金。`,
+      requirement,
+      { code: 'gold', price, item },
+    );
+  }
+  return available(requirement, { code: 'ready', price, item });
+}
+
+export function buyMarketItem(game, itemId) {
+  const player = getCurrentPlayer(game);
+  const availability = getMarketItemAvailability(game, itemId);
+  if (!availability.allowed) return { ok: false, reason: availability.code, availability, price: availability.price };
+  const { item, price } = availability;
   player.gold -= price;
   if (item.id === 'food') player.food += 180;
   if (item.id === 'troops') player.troops += 100;

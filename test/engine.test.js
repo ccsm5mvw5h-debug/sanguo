@@ -12,6 +12,13 @@ import {
   challengeCity,
   checkVictory,
   createGame,
+  getCityPurchaseAvailability,
+  getFerryAvailability,
+  getHospitalAvailability,
+  getMarketItemAvailability,
+  getStrategyCardAvailability,
+  getStrategyDrawAvailability,
+  getUpgradeAvailability,
   moveCurrentPlayer,
   resolveBankruptcy,
   restoreGame,
@@ -42,6 +49,105 @@ test('基础初始金足够购买 15 座最高价的二级城郡', () => {
   const highestMediumCityPrice = Math.max(...CITIES.filter((city) => city.tier === 2).map((city) => city.price));
   assert.equal(highestMediumCityPrice, 700);
   assert.ok(INITIAL_GOLD >= highestMediumCityPrice * 15);
+});
+
+test('购城不可用时说明缺少黄金及解锁标准', () => {
+  const game = createGame({ humanGeneralId: 'zhaoyun', rng: fixedRng(0) });
+  game.phase = PHASES.LANDING;
+  game.players[0].gold = 100;
+  const availability = getCityPurchaseAvailability(game);
+  assert.equal(availability.allowed, false);
+  assert.match(availability.reason, /黄金不足.*缺少 650 金/);
+  assert.equal(availability.requirement, '至少持有 750 金。');
+});
+
+test('升级不可用时同时说明黄金、木材缺口和完整标准', () => {
+  const game = createGame({ humanGeneralId: 'zhaoyun', rng: fixedRng(0) });
+  const player = game.players[0];
+  game.phase = PHASES.POST_ACTION;
+  game.cityStates[0] = { cityId: 0, ownerId: player.id, level: 1 };
+  player.properties = [{ cityId: 0, level: 1 }];
+  player.gold = 100;
+  player.wood = 0;
+  const availability = getUpgradeAvailability(game);
+  assert.equal(availability.allowed, false);
+  assert.match(availability.reason, /黄金缺少 275 金/);
+  assert.match(availability.reason, /木材缺少 2/);
+  assert.equal(availability.requirement, '升至 2 级需要 375 金和 2 木材。');
+});
+
+test('渡口和医馆会显示费用门槛，孙权与华佗保留免费特技', () => {
+  const ferryGame = createGame({ humanGeneralId: 'zhaoyun', rng: fixedRng(0) });
+  ferryGame.players[0].position = 14;
+  ferryGame.players[0].gold = 49;
+  assert.deepEqual(getFerryAvailability(ferryGame), {
+    allowed: false,
+    reason: '黄金不足：当前 49 金，缺少 1 金。',
+    requirement: '乘船需要 50 金；孙权免费。',
+    cost: 50,
+  });
+
+  const sunQuanGame = createGame({ humanGeneralId: 'sunquan', rng: fixedRng(0) });
+  sunQuanGame.players[0].position = 14;
+  sunQuanGame.players[0].gold = 0;
+  assert.equal(getFerryAvailability(sunQuanGame).allowed, true);
+
+  const hospitalGame = createGame({ humanGeneralId: 'zhaoyun', rng: fixedRng(0) });
+  hospitalGame.players[0].position = 123;
+  hospitalGame.players[0].gold = 79;
+  assert.equal(getHospitalAvailability(hospitalGame).allowed, false);
+  assert.equal(getHospitalAvailability(hospitalGame).requirement, '治疗需要 80 金；华佗免费。');
+
+  const huaTuoGame = createGame({ humanGeneralId: 'huatuo', rng: fixedRng(0) });
+  huaTuoGame.players[0].position = 123;
+  huaTuoGame.players[0].gold = 0;
+  assert.equal(getHospitalAvailability(huaTuoGame).allowed, true);
+});
+
+test('市场商品会说明金钱门槛，已拥有的装备不能重复购买', () => {
+  const game = createGame({ humanGeneralId: 'zhaoyun', rng: fixedRng(0) });
+  const player = game.players[0];
+  player.gold = 0;
+  const food = getMarketItemAvailability(game, 'food');
+  assert.equal(food.allowed, false);
+  assert.match(food.reason, /黄金不足/);
+  assert.match(food.requirement, /购买军粮需要 \d+ 金/);
+
+  player.gold = 10_500;
+  player.weapon = 2;
+  const weapon = getMarketItemAvailability(game, 'weapon');
+  assert.equal(weapon.allowed, false);
+  assert.match(weapon.reason, /已经装备/);
+  assert.equal(weapon.requirement, '无需重复购买；当前武器加成已达到 +2。');
+});
+
+test('计策会说明阶段、资源和目标条件', () => {
+  const game = createGame({ humanGeneralId: 'zhaoyun', rng: fixedRng(0) });
+  const player = game.players[0];
+  player.hand = [{ id: 'recruit', name: '募兵', target: 'self' }];
+  game.phase = PHASES.MOVEMENT;
+  assert.equal(getStrategyCardAvailability(game, 0).requirement, '只能在自己的行动后阶段使用计策。');
+
+  game.phase = PHASES.POST_ACTION;
+  player.food = 99;
+  const recruit = getStrategyCardAvailability(game, 0);
+  assert.equal(recruit.allowed, false);
+  assert.equal(recruit.requirement, '使用“募兵”需要至少 100 粮草。');
+
+  player.hand = [{ id: 'sabotage', name: '破坏', target: 'opponent' }];
+  const target = game.players[1];
+  const sabotage = getStrategyCardAvailability(game, 0, target.id);
+  assert.equal(sabotage.allowed, false);
+  assert.equal(sabotage.requirement, '目标必须至少拥有一座 2 级或 3 级城市。');
+});
+
+test('手牌已满时说明抽牌失败原因和释放手牌标准', () => {
+  const game = createGame({ humanGeneralId: 'zhaoyun', rng: fixedRng(0) });
+  game.players[0].hand = Array.from({ length: 4 }, (_, index) => ({ id: `card-${index}` }));
+  const availability = getStrategyDrawAvailability(game);
+  assert.equal(availability.allowed, false);
+  assert.match(availability.reason, /手牌已满/);
+  assert.match(availability.requirement, /少于 4 张/);
 });
 
 test('智力决定手牌上限', () => {
