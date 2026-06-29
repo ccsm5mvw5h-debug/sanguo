@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   ACTIONS,
+  INITIAL_GOLD,
   PHASES,
   applyTurnIncome,
   calculateCombatPower,
@@ -20,6 +21,7 @@ import {
   settleOwnedCities,
   startTurn,
 } from '../src/game/engine.js';
+import { CITIES } from '../src/data/cities.js';
 
 const fixedRng = (value) => () => value;
 
@@ -27,13 +29,19 @@ test('新游戏创建一名玩家和三名 AI，并进入准备阶段', () => {
   const game = createGame({ humanGeneralId: 'zhaoyun', rng: fixedRng(0) });
   assert.equal(game.players.length, 4);
   assert.equal(game.players.filter((player) => player.isHuman).length, 1);
-  assert.equal(game.players[0].gold, 200);
+  assert.equal(game.players[0].gold, 10_500);
   assert.equal(game.phase, PHASES.PREPARATION);
 });
 
-test('袁绍获得初始 200 金加成', () => {
+test('袁绍在 10500 基础初始金上获得额外 200 金', () => {
   const game = createGame({ humanGeneralId: 'yuanshao', rng: fixedRng(0) });
-  assert.equal(game.players[0].gold, 400);
+  assert.equal(game.players[0].gold, 10_700);
+});
+
+test('基础初始金足够购买 15 座最高价的二级城郡', () => {
+  const highestMediumCityPrice = Math.max(...CITIES.filter((city) => city.tier === 2).map((city) => city.price));
+  assert.equal(highestMediumCityPrice, 700);
+  assert.ok(INITIAL_GOLD >= highestMediumCityPrice * 15);
 });
 
 test('智力决定手牌上限', () => {
@@ -47,7 +55,7 @@ test('开始回合发放基础俸禄并处理袁绍粮耗', () => {
   const game = createGame({ humanGeneralId: 'yuanshao', rng: fixedRng(0) });
   const player = game.players[0];
   startTurn(game);
-  assert.equal(player.gold, 484);
+  assert.equal(player.gold, 10_784);
   assert.equal(player.food, 490);
   assert.equal(game.phase, PHASES.MOVEMENT);
 });
@@ -58,7 +66,7 @@ test('移动越过起点时按魅力获得额外黄金', () => {
   game.phase = PHASES.MOVEMENT;
   moveCurrentPlayer(game, 4);
   assert.equal(game.players[0].position, 2);
-  assert.equal(game.players[0].gold, 360);
+  assert.equal(game.players[0].gold, 10_660);
   assert.equal(game.phase, PHASES.LANDING);
 });
 

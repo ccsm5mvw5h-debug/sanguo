@@ -18,6 +18,15 @@ test('所有城市恰好出现一次，所有格子类型有效', () => {
   assert.ok(BOARD.every((tile) => Object.values(TILE_TYPES).includes(tile.type)));
 });
 
+test('所有渡口只把玩家送往更靠前的格子', () => {
+  const ferries = BOARD.filter((tile) => tile.type === TILE_TYPES.FERRY);
+  assert.ok(ferries.length > 0);
+  for (const ferry of ferries) {
+    assert.ok(ferry.destination > ferry.index, `第 ${ferry.index + 1} 格渡口不能向后传送`);
+    assert.ok(ferry.destination < BOARD.length);
+  }
+});
+
 test('城市等级遵循 10:20:30:40，价格和租金在文档区间内', () => {
   const tierCounts = CITIES.reduce((counts, city) => {
     counts[city.tier] = (counts[city.tier] ?? 0) + 1;

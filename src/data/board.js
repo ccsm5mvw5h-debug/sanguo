@@ -24,9 +24,9 @@ const FUNCTIONAL_TILES = new Map([
 const FERRY_ROUTES = Object.freeze({
   14: 85,
   32: 110,
-  52: 14,
-  69: 30,
-  97: 52,
+  52: 97,
+  69: 123,
+  97: 131,
 });
 
 let cityId = 0;

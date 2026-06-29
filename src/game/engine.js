@@ -18,6 +18,7 @@ export const ACTIONS = Object.freeze({
 });
 
 const PLAYER_COLORS = ['#f4d35e', '#ee6c4d', '#63c7b2', '#8d7cff'];
+export const INITIAL_GOLD = 10_500;
 
 function randomIndex(game, length) {
   return Math.min(length - 1, Math.floor(game.rng() * length));
@@ -40,7 +41,7 @@ function makePlayer(general, index, isHuman) {
     isHuman,
     color: PLAYER_COLORS[index],
     position: 0,
-    gold: 200 + (general.id === 'yuanshao' ? 200 : 0),
+    gold: INITIAL_GOLD + (general.id === 'yuanshao' ? 200 : 0),
     troops: 400,
     food: 500,
     wood: 0,
